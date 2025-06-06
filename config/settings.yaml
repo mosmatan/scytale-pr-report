@@ -1,5 +1,5 @@
 github:
-  token: "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"
+  token: "PUT YOU GITHUB TOKEN"
   organization: "mosmatan"
   repository: "PR_Tests"
   api_base_url: "https://api.github.com"
@@ -13,7 +13,7 @@ output:
 
 tests:
   github:
-    token: "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"
+    token: "PUT YOU GITHUB TOKEN"
     organization: "mosmatan"
     repository: "PR_Tests"
     api_base_url: "https://api.github.com"
