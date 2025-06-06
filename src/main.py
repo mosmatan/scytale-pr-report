@@ -1,5 +1,3 @@
-import json
-import os
 import yaml
 from extract import run_extract
 from transform import  run_transformation

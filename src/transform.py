@@ -1,8 +1,6 @@
 import json
 import os
-
 import pandas as pd
-from pygments.lexer import using
 
 from src.GitHubClient import GitHubClient
 
@@ -65,9 +63,6 @@ def run_transformation(config : dict):
                 entry['checks_passed'] = all_success
 
         processed_prs.append(entry)
-
-    # Now `processed_prs` is a list of dicts with exactly the same columns you used before.
-    # You can loop over it, filter it, serialize it again, etc.
 
     # Example: print a summary
     for p in processed_prs:
