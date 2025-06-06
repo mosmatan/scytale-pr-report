@@ -9,6 +9,8 @@ class GitHubClient:
             "Accept": "application/vnd.github.v3+json",
         }
 
+        self._PAGE_SIZE = 100
+
 
     def fetch_merged_prs(self, organization: str, repo: str, filters = None):
         merged_prs = []
@@ -17,7 +19,7 @@ class GitHubClient:
         while True:
             params = {
                 'state': 'closed',
-                'per_page': 100,
+                'per_page': self._PAGE_SIZE,
                 'page': page,
                 'sort': 'updated',
                 'direction': 'desc',
@@ -52,7 +54,7 @@ class GitHubClient:
 
         while True:
             params = {
-                'per_page': 100,
+                'per_page': self._PAGE_SIZE,
                 'page': page,
             }
 
@@ -78,7 +80,7 @@ class GitHubClient:
 
         while True:
             params = {
-                'per_page': 100,
+                'per_page': self._PAGE_SIZE,
                 'page': page,
                 'status': status if status else 'completed',
             }
