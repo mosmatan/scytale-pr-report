@@ -1,7 +1,7 @@
 github:
   token: "<YOUR GITHUB TOKEN>"
-  organization: "NoamKont"
-  repository: "DangerousDave"
+  organization: "mosmatan"
+  repository: "PR_Tests"
   api_base_url: "https://api.github.com"
 
 data:

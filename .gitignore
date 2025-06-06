@@ -1,0 +1,7 @@
+.venv/
+.idea/
+
+
+data/raw/*
+data/processed/*
+output/reports/*
