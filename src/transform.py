@@ -2,6 +2,8 @@ import json
 
 import pandas as pd
 
+from src.GitHubClient import GitHubClient
+
 
 def run_transformation(config : dict):
     github_cfg = config['github']
@@ -27,7 +29,22 @@ def run_transformation(config : dict):
         "checks_passed": False,
     })
 
-    print(f'Processing {repo_name} merged PRs')
+    github_client = GitHubClient(token=github_cfg['token'], base_url=github_cfg['api_base_url'])
+
+    for pr_number in df['number']:
+        approved_reviews = github_client.fetch_approved_reviews(organization=github_cfg['organization'],repo=repo_name,pr_number=pr_number)
+        if len(approved_reviews) > 0:
+            df_processed.loc[df_processed['pr_number'] == pr_number,'cr_passed'] = True
+
+        merge_commit_sha = df.loc[df['number'] == pr_number]['merge_commit_sha'].values[0]
+        checks =  github_client.fetch_pr_check_runs(organization=github_cfg['organization'],repo=repo_name,merge_commit_sha=merge_commit_sha)
+        if len(checks) > 0:
+            all_completed = True
+            for check in checks:
+                if check['conclusion'] != 'success':
+                    all_completed = False
+
+            df_processed.loc[df_processed['pr_number'] == pr_number, 'checks_passed'] = all_completed
 
 
     print(df_processed.head())

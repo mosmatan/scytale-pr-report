@@ -72,6 +72,38 @@ class GitHubClient:
 
         return reviews_comments
 
+    def fetch_pr_check_runs(self, organization : str, repo : str ,merge_commit_sha : str, status = None) -> list:
+        check_runs = []
+        page = 1
+
+        while True:
+            params = {
+                'per_page': 100,
+                'page': page,
+                'status': status if status else 'completed',
+            }
+
+            url = f"{self._base_url}/repos/{organization}/{repo}/commits/{merge_commit_sha}/check-runs"
+            response = requests.get(url, headers=self._headers, params=params)
+            response.raise_for_status()
+
+            check_items = response.json().get('check_runs', [])
+
+            if len(check_items) == 0:
+                break
+
+            check_runs += check_items
+
+            page += 1
+
+        return check_runs
+
+
+
+
+
+
+
 
 
 
