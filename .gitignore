@@ -6,4 +6,4 @@ data/raw/*
 data/processed/*
 output/reports/*
 
-config/settings.yaml
+src/config/settings.yaml

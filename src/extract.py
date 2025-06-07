@@ -56,13 +56,13 @@ def fetch_data(fetch_fn, description: str, *args, **kwargs):
     Wrapper to call a fetch function and log any exceptions.
 
     Returns:
-        The result of fetch_fn, or None on error.
+        The result of fetch_fn.
     """
     try:
         return fetch_fn(*args, **kwargs)
     except Exception:
         logger.exception(f"Error fetching {description}.")
-        return None
+        raise
 
 
 def save_raw_data(raw_payload, cfg):
@@ -109,11 +109,12 @@ def run_extract(config) -> bool:
     # 2. Fetch merged PRs
     try:
         merged_prs = fetch_data(client.fetch_merged_prs,"merged PRs",cfg.organization,cfg.repository) or []
-        logger.info(f"Fetched {len(merged_prs)} merged PRs.")
 
         if not merged_prs:
             logger.warning("No merged PRs found. Stopping extraction.")
             return False
+
+        logger.info(f"Fetched {len(merged_prs)} merged PRs.")
 
     except Exception:
         # fetch_data logs the exception

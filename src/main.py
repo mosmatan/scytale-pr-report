@@ -17,7 +17,7 @@ def main():
 
     logger.info("Starting Scytale PR Report...")
     try:
-        config = load_config('../config/settings.yaml')
+        config = load_config('config/settings.yaml')
     except FileNotFoundError:
         logger.error("Configuration file settings.yaml not found. Exiting.")
         return

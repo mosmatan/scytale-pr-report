@@ -8,12 +8,15 @@ from tqdm import tqdm
 
 import pandas as pd
 
+from src.extract import RAW_FILENAME_TEMPLATE
+
 # Constants
 MERGED_PRS_KEY = 'merged_prs'
 REVIEWS_KEY = 'reviews'
 CHECK_STATUSES_KEY = 'check_statuses'
 
-PROCESSED_FILENAME_TEMPLATE = "{org}_{repo}_merged_prs.json"
+RAW_FILENAME_TEMPLATE = "{org}_{repo}_merged_prs.json"
+PROCESSED_FILENAME_TEMPLATE = "{org}_{repo}_processed_merged_prs.json"
 REPORT_FILENAME_TEMPLATE = "{org}_{repo}_report.csv"
 
 logger = logging.getLogger(__name__)
@@ -174,7 +177,7 @@ def run_transformation(config_dict) -> None:
 
     try:
         # Build raw data file path
-        raw_filename = PROCESSED_FILENAME_TEMPLATE.format(org=cfg.organization, repo=cfg.repository)
+        raw_filename = RAW_FILENAME_TEMPLATE.format(org=cfg.organization, repo=cfg.repository)
         raw_path = os.path.join(cfg.raw_dir_path, raw_filename)
 
         # Load raw data
