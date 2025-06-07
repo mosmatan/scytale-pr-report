@@ -1,0 +1,11 @@
+github:
+  organization: "<YOUR ORGANIZATION>"
+  repository: "<YOUR REPOSITORY>"
+  api_base_url: "https://api.github.com"
+
+data:
+  raw_dir_path: "../data/raw"
+  processed_dir_path: "../data/processed"
+
+output:
+  report_dir_path: "../output/reports"

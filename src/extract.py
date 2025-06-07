@@ -3,8 +3,8 @@ import os
 import logging
 from dataclasses import dataclass
 
+from dotenv import load_dotenv
 from tqdm import tqdm
-
 from GitHubClient import GitHubClient
 
 logger = logging.getLogger(__name__)
@@ -42,8 +42,11 @@ def fetch_config(config) -> ExtractConfig:
     if not data_cfg or 'raw_dir_path' not in data_cfg:
         raise ValueError("Missing 'data.raw_dir_path' in configuration.")
 
+    load_dotenv()
+
     return ExtractConfig(
-        token=github_cfg['token'],
+        # how to get the token from environment variable???
+        token= os.getenv('GITHUB_TOKEN'),
         api_base_url=github_cfg['api_base_url'],
         repository=github_cfg['repository'],
         organization=github_cfg['organization'],
