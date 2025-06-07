@@ -1,8 +1,9 @@
 import json
+import logging
 import os
 import pandas as pd
 
-
+logger = logging.getLogger()
 def load_raw_prs(raw_path):
     with open(raw_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -53,32 +54,33 @@ def run_transformation(config: dict):
     repo_name = github_cfg['repository']
     org_name = github_cfg['organization']
 
-    print(f"Transforming data for {org_name}/{repo_name}...")
+    logger.name = f'{__name__}_{org_name}_{repo_name}'
+    logger.info(f"Transforming data...")
     raw_path = f"{config['data']['raw_dir_path']}/{org_name}_{repo_name}_merged_prs.json"
 
     try:
         raw_prs, reviews, check_statuses  = load_raw_prs(raw_path)
     except FileNotFoundError:
-        print(f"Raw data file {raw_path} not found. Please run the extraction step first.")
+        logger.exception(f"Raw data file {raw_path} not found. Please run the extraction step first. exeption: {e}")
         return
 
-    print(f'Processing {repo_name} merged PRs')
+    logger.info(f'Processing {repo_name} merged PRs')
 
     try:
         processed_prs = [process_pr(pr, reviews[str(pr['number'])], check_statuses[str(pr['number'])]) for pr in raw_prs]
     except KeyError as e:
-        print(f"Missing data for PR number {e}. Please check the raw data file.")
+        logger.exception(f"Missing data for PR number {e}. Please check the raw data file.")
         return
     except Exception as e:
-        print(f"An error occurred during processing: {e}")
+        logger.exception(f"An error occurred during processing: {e}")
         return
 
-    print_processed_prs(processed_prs)
+    logger.info(f'saving processed data...')
     try:
         save_processed_prs(processed_prs, config['data']['processed_dir_path'],org_name, repo_name)
         save_report(processed_prs, config['output']['report_dir_path'],org_name, repo_name)
     except Exception as e:
-        print(f"An error occurred while saving processed data: {e}")
+        logger.exception(f"An error occurred while saving processed data: {e}")
         return
 
-    print(f"Transformation completed for {org_name}/{repo_name}.")
+    logger.info(f"Transformation completed for {org_name}/{repo_name}.")

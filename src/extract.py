@@ -1,7 +1,9 @@
 import json
 import os
+import logging
 from src.GitHubClient import GitHubClient
 
+logger = logging.getLogger()
 
 def save_raw_data_to_file(raw_data,org_name, raw_dir_path, repo_name):
     os.makedirs(raw_dir_path, exist_ok=True)
@@ -11,16 +13,15 @@ def save_raw_data_to_file(raw_data,org_name, raw_dir_path, repo_name):
     with open(raw_path, 'w', encoding='utf-8') as f:
         json.dump(raw_data, f, ensure_ascii=False, indent=4)
 
-    print(f'Extracted {len(raw_data)} merged PRs to {raw_path}.')
+    logger.info(f'Extracted {len(raw_data)} merged PRs to {raw_path}.')
 
 
 def fetch_data(fetch_function, description, *args, **kwargs):
     try:
         return fetch_function(*args, **kwargs)
     except Exception as e:
-        print(f'Error fetching {description}: {e}')
+        logger.exception(f'Error fetching {description}: {e}')
         return None
-
 
 
 def run_extract(config: dict) -> bool:
@@ -29,17 +30,19 @@ def run_extract(config: dict) -> bool:
     repo_name = github_cfg['repository']
     org_name = github_cfg['organization']
 
-    print(f'Extracting {org_name}/{repo_name}...')
+    logger.name = f'{__name__}_{org_name}_{repo_name}'
+    logger.info(f'Extracting {org_name}/{repo_name}...')
 
     client = GitHubClient(github_cfg['token'], github_cfg['api_base_url'])
 
+    logger.info(f'fetching merged PRs...')
     merged_prs = fetch_data(client.fetch_merged_prs, "merged PRs", github_cfg['organization'], repo_name)
     if not merged_prs:
-        print(f'No merged PRs found in {org_name}/{repo_name}.')
+        logger.warning(f'No merged PRs found.')
         return False
 
-    print(f'Found {len(merged_prs)} merged PRs in {org_name}/{repo_name}.')
-
+    logger.info(f'Found {len(merged_prs)} merged PRs.')
+    logger.info(f'Fetching reviews')
     reviews = fetch_data(
         lambda: [(pr['number'], client.fetch_approved_reviews(
             organization=github_cfg['organization'],
@@ -50,9 +53,12 @@ def run_extract(config: dict) -> bool:
     )
 
     if reviews is None:
+        logger.warning('No reviews found for merged PRs.')
         return False
     reviews = {pr_number: review for pr_number, review in reviews}
+    logger.info(f'Found {len(reviews)} reviews for merged PRs.')
 
+    logger.info(f'Fetching check runs')
     check_statuses = fetch_data(
         lambda: [(pr['number'], client.fetch_pr_check_runs(
             organization=github_cfg['organization'],
@@ -63,8 +69,11 @@ def run_extract(config: dict) -> bool:
     )
 
     if check_statuses is None:
+        logger.warning('No check runs found for merged PRs.')
         return False
     check_statuses = {pr_number: checks for pr_number, checks in check_statuses}
+    logger.info(f'Found {len(check_statuses)} check runs for merged PRs.')
+
 
     raw_data = {
         'last_merged_date': max(merged_prs, key=lambda pr: pr['merged_at'])['merged_at'],
@@ -73,7 +82,13 @@ def run_extract(config: dict) -> bool:
         'reviews': reviews,
         'check_statuses': check_statuses
     }
-    save_raw_data_to_file(raw_data,org_name ,raw_dir_path, repo_name)
+
+    logger.info(f'Saving raw data to {raw_dir_path}/{org_name}_{repo_name}_merged_prs.json')
+    try:
+        save_raw_data_to_file(raw_data,org_name ,raw_dir_path, repo_name)
+    except Exception as e:
+        logger.exception(f'Error saving raw data: {e}')
+        return False
 
     return True
 
