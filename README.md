@@ -91,7 +91,7 @@ Setup Instructions:
 6. Run the full pipeline:
 
    ```bash
-   python src/main.py [OPTIONS]
+   python main.py [OPTIONS]
    ```
 
    Available Filter Options:
