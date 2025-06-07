@@ -17,7 +17,7 @@ def process_pr(pr, reviews, check_statuses):
         'author': pr.get('user', {}).get('login'),
         'merge_date': pr.get('merged_at'),
         'cr_passed': bool(reviews),
-        'checks_passed': bool(check_statuses)
+        'checks_passed': all(check['conclusion'] == 'success' for check in check_statuses if check['status'] == 'completed') if check_statuses else False,
     }
 
     return entry
@@ -27,6 +27,8 @@ def save_processed_prs(processed_prs, processed_dir_path,org_name, repo_name):
     os.makedirs(processed_dir_path, exist_ok=True)
     with open(f"{processed_dir_path}/{org_name}_{repo_name}_merged_prs.json", 'w', encoding='utf-8') as f:
         json.dump(processed_prs, f, ensure_ascii=False, indent=4)
+
+    logger.info(f'Saved processed PRs to {processed_dir_path}/{org_name}_{repo_name}_merged_prs.json')
 
 
 def save_report(processed_prs, report_dir_path,org_name, repo_name):
@@ -41,6 +43,8 @@ def save_report(processed_prs, report_dir_path,org_name, repo_name):
     })
     df.to_csv(f"{report_dir_path}/{org_name}_{repo_name}_report.csv", index=False)
 
+    logger.info(f'Saved report to {report_dir_path}/{org_name}_{repo_name}_report.csv')
+
 
 def print_processed_prs(processed_prs):
     for p in processed_prs:
@@ -48,15 +52,36 @@ def print_processed_prs(processed_prs):
             f"PR #{p['pr_number']:<4} | title={p['pr_title']} | CR Passed={'✔' if p['cr_passed'] else '✘'} | Checks Passed={'✔' if p['checks_passed'] else '✘'}"
         )
 
+def fetch_config(config: dict):
+    github_cfg = config.get('github', {})
+    if not github_cfg:
+        raise ValueError("GitHub configuration is missing in the provided config.")
+
+    required_keys = ['token', 'api_base_url', 'repository', 'organization']
+    for key in required_keys:
+        if key not in github_cfg:
+            raise ValueError(f"Missing required GitHub configuration key: {key}")
+
+    data_cfg = config.get('data', {})
+    if not data_cfg:
+        raise ValueError("Data configuration is missing in the provided config.")
+    if 'raw_dir_path' not in data_cfg:
+        raise ValueError("Missing 'raw_dir_path' in data configuration.")
+
+    return github_cfg, github_cfg['repository'], github_cfg['organization'], data_cfg['raw_dir_path']
+
 
 def run_transformation(config: dict):
-    github_cfg = config['github']
-    repo_name = github_cfg['repository']
-    org_name = github_cfg['organization']
+
+    try:
+        github_cfg, repo_name, org_name, raw_dir_path = fetch_config(config)
+    except Exception as e:
+        logger.name = f'{__name__}'
+        logger.exception(f'Error fetching configuration: {e}')
+        return
 
     logger.name = f'{__name__}_{org_name}_{repo_name}'
     logger.info(f"Transforming data...")
-    raw_path = f"{config['data']['raw_dir_path']}/{org_name}_{repo_name}_merged_prs.json"
 
     try:
         raw_prs, reviews, check_statuses  = load_raw_prs(raw_path)

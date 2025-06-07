@@ -92,6 +92,8 @@ class GitHubClient:
 
             check_items = response.json().get('check_runs', [])
 
+            print(check_items)
+
             if len(check_items) == 0: # when the page is empty and there is no more data to retrieve
                 break
 
