@@ -4,6 +4,7 @@ import json
 import os
 import logging
 from dataclasses import dataclass
+from tqdm import tqdm
 
 import pandas as pd
 
@@ -185,11 +186,12 @@ def run_transformation(config_dict) -> None:
 
         # Process PRs
         processed_prs = []
-        for pr in merged_prs:
+        for pr in tqdm(merged_prs, desc="Processing PRs", unit="PR"):
             pr_key = str(pr.get('number'))
             if pr_key not in reviews_map or pr_key not in checks_map:
                 raise KeyError(f"Missing data for PR number {pr_key}")
             processed_prs.append(process_pr(pr, reviews_map[pr_key], checks_map[pr_key]))
+        logger.info(f"Processed {len(processed_prs)} PR records")
 
         # Save outputs
         save_processed_prs(processed_prs, cfg)
