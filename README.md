@@ -108,7 +108,7 @@ Setup Instructions:
    For detailed help on flags:
 
    ```bash
-   python src/main.py --help
+   python main.py --help
    ```
 
 Examples:
@@ -116,19 +116,19 @@ Examples:
 * Extract and transform all PRs:
 
   ```bash
-  python src/main.py
+  python main.py
   ```
 
 * Only include PRs merged in the last 7 days by author "alice":
 
   ```bash
-  python src/main.py --merged-since 7 --only-authors alice
+  python main.py --merged-since 7 --only-authors alice
   ```
 
 * Only include only passing check runs and reviews by "bob":
 
   ```bash
-  python src/main.py --pass-only --reviewers bob
+  python main.py --pass-only --reviewers bob
   ```
 
 Outputs:
