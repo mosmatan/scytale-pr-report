@@ -1,130 +1,99 @@
-import requests
+
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
+
 class GitHubClient:
-    def __init__(self, token, base_url):
-        self._token = token
-        self._base_url = base_url
-        self._headers = {
-            "Authorization": f"Bearer {self._token}",
-            "Accept": "application/vnd.github.v3+json",
-        }
+    def __init__(self, token, base_url, page_size=50):
+        self.base_url = base_url.rstrip('/')
+        self.page_size = page_size
 
-        self._PAGE_SIZE = 50
+        self.session = requests.Session()
+        self.session.headers.update({
+            'Authorization': f'Bearer {token}',
+            'Accept': 'application/vnd.github.v3+json',
+        })
 
+        logger.debug(f"GitHubClient initialized with base_url={self.base_url}, page_size={self.page_size}")
 
-    def fetch_merged_prs(self, organization: str, repo: str, filters = None):
-        merged_prs = []
+    def _get_json(self, endpoint, params=None):
+        url = f"{self.base_url}{endpoint}"
+
+        response = self.session.get(url, params=params)
+        response.raise_for_status()
+
+        return response.json()
+
+    def _paginate(self, endpoint, params=None, data_key=None):
         page = 1
 
-        logger.info(f"Fetching merged PRs for {organization}/{repo}")
+        while True:
+            page_params = dict(params or {}, per_page=self.page_size, page=page)
+            payload = self._get_json(endpoint, page_params)
 
+            items = payload.get(data_key) if data_key else payload
+            if not items:
+                break
+
+            for item in items: # iterate over items in the current page (iterator dp)
+                yield item
+
+            page += 1
+
+    def fetch_merged_prs(self, org, repo, filters=None):
+        logger.info(f"Fetching merged PRs for {org}/{repo}")
+
+        endpoint = f"/repos/{org}/{repo}/pulls"
         params = {
             'state': 'closed',
-            'per_page': self._PAGE_SIZE,
-            'page': page,
             'sort': 'updated',
             'direction': 'desc',
         }
 
-        while True:
-            params['page'] = page
-            logger.debug(f"fetch page {page} for merged PRs")
+        prs = []
+        for pr in self._paginate(endpoint, params):
+            if not pr.get('merged_at'):
+                continue
 
-            url = f"{self._base_url}/repos/{organization}/{repo}/pulls"
-            response = requests.get(url, headers=self._headers, params=params)
-            response.raise_for_status()
-            prs_items = response.json()
+            if filters and not all(fn(pr) for fn in filters): # apply filters if provided
+                continue
 
-            if not prs_items: #when the page is empty and there is no more data to retrieve
-                break
+            prs.append(pr)
 
-            for pr in prs_items:
-                if pr['merged_at']: # check if it really merged and not open or denied
-                    if not filters or all(f(pr) for f in filters): # runs all the filters and only if pass all of them then added to merged_prs
-                        merged_prs.append(pr)
+        logger.info(f"Found {len(prs)} merged PRs for {org}/{repo}")
+        return prs
 
-            page += 1
+    def fetch_approved_reviews(self, org, repo, pr_number, filters=None):
+        logger.debug(f"Fetching approved reviews for PR #{pr_number} in {org}/{repo}")
 
-        logger.info(f"Fetched {len(merged_prs)} merged PRs")
-        return merged_prs
+        endpoint = f"/repos/{org}/{repo}/pulls/{pr_number}/reviews"
 
-    def fetch_approved_reviews(self, organization: str, repo: str, pr_number : int, filters = None) -> list :
-        reviews_comments = []
-        page = 1
+        reviews = []
+        for review in self._paginate(endpoint):
+            if review.get('state') != 'APPROVED':
+                continue
 
-        logger.debug(f"Fetching approved reviews for PR #{pr_number} in {organization}/{repo}")
+            if filters and not all(fn(review) for fn in filters): # apply filters if provided
+                continue
 
-        params = {
-            'per_page': self._PAGE_SIZE,
-            'page': page,
-        }
+            reviews.append(review)
 
-        while True:
-            params['page'] = page
-            logger.debug(f"fetch page {page} for reviews of PR #{pr_number}")
+        logger.debug(f"Retrieved {len(reviews)} approved reviews for PR #{pr_number}")
+        return reviews
 
-            url = f"{self._base_url}/repos/{organization}/{repo}/pulls/{pr_number}/reviews"
-            response = requests.get(url, headers=self._headers, params=params)
-            response.raise_for_status()
-            reviews_items = response.json()
+    def fetch_pr_check_runs(self, org, repo, commit_sha, status='completed', filters=None):
+        logger.debug(f"Fetching check runs for commit {commit_sha} in {org}/{repo} (status={status})")
 
-            if not reviews_items: #when the page is empty and there is no more data to retrieve
-                break
+        endpoint = f"/repos/{org}/{repo}/commits/{commit_sha}/check-runs"
+        params = {'status': status}
 
-            for review in reviews_items:
-                if review['state'] == 'APPROVED': # only approved reviews can add to the result
-                    if not filters or all(f(review) for f in filters): # runs all the filters and only if pass all of them then added to reviews_comments
-                            reviews_comments.append(review)
+        runs = []
+        for check in self._paginate(endpoint, params, data_key='check_runs'):
+            if filters and not all(fn(check) for fn in filters): # apply filters if provided
+                continue
 
-            page += 1
+            runs.append(check)
 
-        logger.debug(f"Fetched {len(reviews_comments)} approved reviews for PR #{pr_number}")
-        return reviews_comments
-
-    def fetch_pr_check_runs(self, organization : str, repo : str ,merge_commit_sha : str, status = None, filters = None) -> list:
-        check_runs = []
-        page = 1
-        logger.debug(f"Fetching check runs for merge commit {merge_commit_sha} in {organization}/{repo}")
-
-        params = {
-            'per_page': self._PAGE_SIZE,
-            'page': page,
-            'status': status if status else 'completed',
-        }
-
-        while True:
-            params['page'] = page
-            logger.debug(f"fetch page {page} for check runs of merge commit {merge_commit_sha}")
-
-            url = f"{self._base_url}/repos/{organization}/{repo}/commits/{merge_commit_sha}/check-runs"
-            response = requests.get(url, headers=self._headers, params=params)
-            response.raise_for_status()
-
-            check_items = response.json().get('check_runs', [])
-
-            logger.debug(check_items)
-
-            if len(check_items) == 0: # when the page is empty and there is no more data to retrieve
-                break
-
-            if filters:
-                check_items = [check for check in check_items if all(f(check) for f in filters)]
-
-            check_runs += check_items
-
-            page += 1
-
-        logger.debug(f"Fetched {len(check_runs)} check runs for merge commit {merge_commit_sha}")
-        return check_runs
-
-
-
-
-
-
-
-
-
-
+        logger.debug(f"Found {len(runs)} check runs for commit {commit_sha}")
+        return runs
