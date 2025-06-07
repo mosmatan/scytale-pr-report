@@ -1,5 +1,7 @@
 import requests
+import logging
 
+logger = logging.getLogger(__name__)
 class GitHubClient:
     def __init__(self, token, base_url):
         self._token = token
@@ -16,6 +18,8 @@ class GitHubClient:
         merged_prs = []
         page = 1
 
+        logger.info(f"Fetching merged PRs for {organization}/{repo}")
+
         params = {
             'state': 'closed',
             'per_page': self._PAGE_SIZE,
@@ -26,6 +30,7 @@ class GitHubClient:
 
         while True:
             params['page'] = page
+            logger.debug(f"fetch page {page} for merged PRs")
 
             url = f"{self._base_url}/repos/{organization}/{repo}/pulls"
             response = requests.get(url, headers=self._headers, params=params)
@@ -42,11 +47,14 @@ class GitHubClient:
 
             page += 1
 
+        logger.info(f"Fetched {len(merged_prs)} merged PRs")
         return merged_prs
 
     def fetch_approved_reviews(self, organization: str, repo: str, pr_number : int, filters = None) -> list :
         reviews_comments = []
         page = 1
+
+        logger.debug(f"Fetching approved reviews for PR #{pr_number} in {organization}/{repo}")
 
         params = {
             'per_page': self._PAGE_SIZE,
@@ -55,6 +63,7 @@ class GitHubClient:
 
         while True:
             params['page'] = page
+            logger.debug(f"fetch page {page} for reviews of PR #{pr_number}")
 
             url = f"{self._base_url}/repos/{organization}/{repo}/pulls/{pr_number}/reviews"
             response = requests.get(url, headers=self._headers, params=params)
@@ -71,11 +80,13 @@ class GitHubClient:
 
             page += 1
 
+        logger.debug(f"Fetched {len(reviews_comments)} approved reviews for PR #{pr_number}")
         return reviews_comments
 
     def fetch_pr_check_runs(self, organization : str, repo : str ,merge_commit_sha : str, status = None, filters = None) -> list:
         check_runs = []
         page = 1
+        logger.debug(f"Fetching check runs for merge commit {merge_commit_sha} in {organization}/{repo}")
 
         params = {
             'per_page': self._PAGE_SIZE,
@@ -85,6 +96,7 @@ class GitHubClient:
 
         while True:
             params['page'] = page
+            logger.debug(f"fetch page {page} for check runs of merge commit {merge_commit_sha}")
 
             url = f"{self._base_url}/repos/{organization}/{repo}/commits/{merge_commit_sha}/check-runs"
             response = requests.get(url, headers=self._headers, params=params)
@@ -92,7 +104,7 @@ class GitHubClient:
 
             check_items = response.json().get('check_runs', [])
 
-            print(check_items)
+            logger.debug(check_items)
 
             if len(check_items) == 0: # when the page is empty and there is no more data to retrieve
                 break
@@ -104,6 +116,7 @@ class GitHubClient:
 
             page += 1
 
+        logger.debug(f"Fetched {len(check_runs)} check runs for merge commit {merge_commit_sha}")
         return check_runs
 
 

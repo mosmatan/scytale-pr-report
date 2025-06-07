@@ -1,111 +1,202 @@
+
+
 import json
-import logging
 import os
+import logging
+from dataclasses import dataclass
+
 import pandas as pd
 
-logger = logging.getLogger()
+# Constants
+MERGED_PRS_KEY = 'merged_prs'
+REVIEWS_KEY = 'reviews'
+CHECK_STATUSES_KEY = 'check_statuses'
+
+PROCESSED_FILENAME_TEMPLATE = "{org}_{repo}_merged_prs.json"
+REPORT_FILENAME_TEMPLATE = "{org}_{repo}_report.csv"
+
+logger = logging.getLogger(__name__)
+
+@dataclass(frozen=True)
+class TransformConfig:
+    """
+    Configuration for the transformation process.
+    """
+    token: str
+    api_base_url: str
+    repository: str
+    organization: str
+    raw_dir_path: str
+    processed_dir_path: str
+    report_dir_path: str
+
+
+def fetch_config(config):
+    """
+    Parses and validates the configuration dictionary.
+
+    Raises:
+        ValueError: if any required configuration is missing.
+    """
+    github_cfg = config.get('github')
+    if not github_cfg:
+        raise ValueError("Missing 'github' section in configuration.")
+
+    for key in ('token', 'api_base_url', 'repository', 'organization'):
+        if key not in github_cfg:
+            raise ValueError(f"Missing GitHub config key: '{key}'")
+
+    data_cfg = config.get('data')
+    if not data_cfg:
+        raise ValueError("Missing 'data' section in configuration.")
+    if 'raw_dir_path' not in data_cfg:
+        raise ValueError("Missing 'data.raw_dir_path' in configuration.")
+    if 'processed_dir_path' not in data_cfg:
+        raise ValueError("Missing 'data.processed_dir_path' in configuration.")
+
+    output_cfg = config.get('output')
+    if not output_cfg or 'report_dir_path' not in output_cfg:
+        raise ValueError("Missing 'output.report_dir_path' in configuration.")
+
+    return TransformConfig(
+        token=github_cfg['token'],
+        api_base_url=github_cfg['api_base_url'],
+        repository=github_cfg['repository'],
+        organization=github_cfg['organization'],
+        raw_dir_path=data_cfg['raw_dir_path'],
+        processed_dir_path=data_cfg['processed_dir_path'],
+        report_dir_path=output_cfg['report_dir_path'],
+    )
+
+
 def load_raw_prs(raw_path):
+    """
+    Loads raw PR data from a JSON file.
+
+    Returns:
+        merged_prs: list of PR dictionaries
+        reviews: mapping of PR number (as str) to list of review dicts
+        check_statuses: mapping of PR number (as str) to list of check-status dicts
+    """
+    logger.debug(f"Loading raw PR data from {raw_path}")
     with open(raw_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-        return data.get('merged_prs', []), data.get('reviews', {}), data.get('check_statuses', {})
+        payload = json.load(f)
+
+    merged_prs = payload.get(MERGED_PRS_KEY, [])
+    reviews = payload.get(REVIEWS_KEY, {})
+    check_statuses = payload.get(CHECK_STATUSES_KEY, {})
+
+    return merged_prs, reviews, check_statuses
 
 
-def process_pr(pr, reviews, check_statuses):
-    entry = {
-        'pr_number': pr['number'],
+def process_pr(pr, reviews, checks):
+    """
+    Transforms a single PR record into a flat dictionary for reporting.
+    """
+    pr_number = pr.get('number')
+
+    # Code review passed if any review has state 'APPROVED'
+    cr_passed = any(r.get('state') == 'APPROVED' for r in reviews)
+
+    # Checks passed only if at least one completed check exists and all succeed
+    completed_checks = [c for c in checks if c.get('status') == 'completed']
+    checks_passed = bool(completed_checks) and all(c.get('conclusion') == 'success' for c in completed_checks)
+
+    result = {
+        'pr_number': pr_number,
         'pr_title': pr.get('title'),
         'author': pr.get('user', {}).get('login'),
         'merge_date': pr.get('merged_at'),
-        'cr_passed': bool(reviews),
-        'checks_passed': all(check['conclusion'] == 'success' for check in check_statuses if check['status'] == 'completed') if check_statuses else False,
+        'cr_passed': cr_passed,
+        'checks_passed': checks_passed,
     }
-
-    return entry
-
-
-def save_processed_prs(processed_prs, processed_dir_path,org_name, repo_name):
-    os.makedirs(processed_dir_path, exist_ok=True)
-    with open(f"{processed_dir_path}/{org_name}_{repo_name}_merged_prs.json", 'w', encoding='utf-8') as f:
-        json.dump(processed_prs, f, ensure_ascii=False, indent=4)
-
-    logger.info(f'Saved processed PRs to {processed_dir_path}/{org_name}_{repo_name}_merged_prs.json')
+    logger.debug(f"Processed PR data: {result}")
+    return result
 
 
-def save_report(processed_prs, report_dir_path,org_name, repo_name):
-    os.makedirs(report_dir_path, exist_ok=True)
-    df = pd.DataFrame.from_records(processed_prs).rename(columns={
-        'pr_number': 'PR number',
-        'pr_title': 'PR title',
-        'author': 'Author',
-        'merge_date': 'Merge date',
-        'cr_passed': 'CR_Passed',
-        'checks_passed': 'CHECKS_PASSED',
-    })
-    df.to_csv(f"{report_dir_path}/{org_name}_{repo_name}_report.csv", index=False)
-
-    logger.info(f'Saved report to {report_dir_path}/{org_name}_{repo_name}_report.csv')
-
-
-def print_processed_prs(processed_prs):
-    for p in processed_prs:
-        print(
-            f"PR #{p['pr_number']:<4} | title={p['pr_title']} | CR Passed={'✔' if p['cr_passed'] else '✘'} | Checks Passed={'✔' if p['checks_passed'] else '✘'}"
-        )
-
-def fetch_config(config: dict):
-    github_cfg = config.get('github', {})
-    if not github_cfg:
-        raise ValueError("GitHub configuration is missing in the provided config.")
-
-    required_keys = ['token', 'api_base_url', 'repository', 'organization']
-    for key in required_keys:
-        if key not in github_cfg:
-            raise ValueError(f"Missing required GitHub configuration key: {key}")
-
-    data_cfg = config.get('data', {})
-    if not data_cfg:
-        raise ValueError("Data configuration is missing in the provided config.")
-    if 'raw_dir_path' not in data_cfg:
-        raise ValueError("Missing 'raw_dir_path' in data configuration.")
-
-    return github_cfg, github_cfg['repository'], github_cfg['organization'], data_cfg['raw_dir_path']
-
-
-def run_transformation(config: dict):
+def save_processed_prs(processed, cfg: TransformConfig):
 
     try:
-        github_cfg, repo_name, org_name, raw_dir_path = fetch_config(config)
+        os.makedirs(cfg.processed_dir_path, exist_ok=True)
+        filename = PROCESSED_FILENAME_TEMPLATE.format(org=cfg.organization, repo=cfg.repository)
+        path = os.path.join(cfg.processed_dir_path, filename)
+
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(processed, f, ensure_ascii=False, indent=4)
+
+        logger.info(f"Saved processed PRs to {path}")
+    except Exception:
+        logger.exception(f"Failed to save processed PRs to {cfg.processed_dir_path}")
+        raise
+
+
+def save_report(processed_data, cfg: TransformConfig):
+
+    try:
+        os.makedirs(cfg.report_dir_path, exist_ok=True)
+        df = pd.DataFrame.from_records(processed_data).rename(columns={
+            'pr_number': 'PR number',
+            'pr_title': 'PR title',
+            'author': 'Author',
+            'merge_date': 'Merge date',
+            'cr_passed': 'CR_Passed',
+            'checks_passed': 'CHECKS_PASSED',
+        })
+
+        filename = REPORT_FILENAME_TEMPLATE.format(org=cfg.organization, repo=cfg.repository)
+        path = os.path.join(cfg.report_dir_path, filename)
+        df.to_csv(path, index=False)
+
+        logger.info(f"Saved report to {path}")
+    except Exception:
+        logger.exception(f"Failed to save report to {cfg.report_dir_path}")
+        raise
+
+
+def run_transformation(config_dict) -> None:
+    """
+    The transformation pipeline:
+      1. Validates configuration
+      2. Loads raw PR data
+      3. Processes each PR
+      4. Saves JSON and CSV outputs
+
+    Raises:
+        ValueError: if configuration is invalid
+        KeyError: if any PR is missing required data
+        Exception: for any other errors during processing
+
+    """
+    cfg = fetch_config(config_dict)
+    logger.name = f'{__name__}_{cfg.organization}_{cfg.repository}'
+    logger.info(f"Starting transformation")
+
+    try:
+        # Build raw data file path
+        raw_filename = PROCESSED_FILENAME_TEMPLATE.format(org=cfg.organization, repo=cfg.repository)
+        raw_path = os.path.join(cfg.raw_dir_path, raw_filename)
+
+        # Load raw data
+        merged_prs, reviews_map, checks_map = load_raw_prs(raw_path)
+
+        if len(merged_prs) == 0:
+            logger.warning(f"No merged PRs found. Skipping transformation")
+            return
+
+        # Process PRs
+        processed_prs = []
+        for pr in merged_prs:
+            pr_key = str(pr.get('number'))
+            if pr_key not in reviews_map or pr_key not in checks_map:
+                raise KeyError(f"Missing data for PR number {pr_key}")
+            processed_prs.append(process_pr(pr, reviews_map[pr_key], checks_map[pr_key]))
+
+        # Save outputs
+        save_processed_prs(processed_prs, cfg)
+        save_report(processed_prs, cfg)
+
+        logger.info(f"Transformation completed")
+
     except Exception as e:
-        logger.name = f'{__name__}'
-        logger.exception(f'Error fetching configuration: {e}')
-        return
-
-    logger.name = f'{__name__}_{org_name}_{repo_name}'
-    logger.info(f"Transforming data...")
-
-    try:
-        raw_prs, reviews, check_statuses  = load_raw_prs(raw_path)
-    except FileNotFoundError:
-        logger.exception(f"Raw data file {raw_path} not found. Please run the extraction step first. exeption: {e}")
-        return
-
-    logger.info(f'Processing {repo_name} merged PRs')
-
-    try:
-        processed_prs = [process_pr(pr, reviews[str(pr['number'])], check_statuses[str(pr['number'])]) for pr in raw_prs]
-    except KeyError as e:
-        logger.exception(f"Missing data for PR number {e}. Please check the raw data file.")
-        return
-    except Exception as e:
-        logger.exception(f"An error occurred during processing: {e}")
-        return
-
-    logger.info(f'saving processed data...')
-    try:
-        save_processed_prs(processed_prs, config['data']['processed_dir_path'],org_name, repo_name)
-        save_report(processed_prs, config['output']['report_dir_path'],org_name, repo_name)
-    except Exception as e:
-        logger.exception(f"An error occurred while saving processed data: {e}")
-        return
-
-    logger.info(f"Transformation completed for {org_name}/{repo_name}.")
+        logger.exception(f"Transformation failed: {e}")
+        raise

@@ -1,115 +1,170 @@
 import json
 import os
 import logging
-from src.GitHubClient import GitHubClient
+from dataclasses import dataclass
 
-logger = logging.getLogger()
+from tqdm import tqdm
 
-def save_raw_data_to_file(raw_data,org_name, raw_dir_path, repo_name):
-    os.makedirs(raw_dir_path, exist_ok=True)
+from GitHubClient import GitHubClient
 
-    raw_path = os.path.join(raw_dir_path, f'{org_name}_{repo_name}_merged_prs.json')
+logger = logging.getLogger(__name__)
 
-    with open(raw_path, 'w', encoding='utf-8') as f:
-        json.dump(raw_data, f, ensure_ascii=False, indent=4)
+# File name template for raw data output
+RAW_FILENAME_TEMPLATE = "{org}_{repo}_merged_prs.json"
 
-    logger.info(f'Extracted {len(raw_data)} merged PRs to {raw_path}.')
+@dataclass(frozen=True)
+class ExtractConfig:
+    """
+    Configuration for the extraction process.
+    """
+    token: str
+    api_base_url: str
+    repository: str
+    organization: str
+    raw_dir_path: str
 
 
-def fetch_data(fetch_function, description, *args, **kwargs):
+def fetch_config(config) -> ExtractConfig:
+    """
+    Parses and validates the configuration dictionary for extraction.
+
+    Raises:
+        ValueError: if any required configuration is missing.
+    """
+    github_cfg = config.get('github')
+    if not github_cfg:
+        raise ValueError("Missing 'github' section in configuration.")
+    for key in ('token', 'api_base_url', 'repository', 'organization'):
+        if key not in github_cfg:
+            raise ValueError(f"Missing GitHub config key: '{key}'")
+
+    data_cfg = config.get('data')
+    if not data_cfg or 'raw_dir_path' not in data_cfg:
+        raise ValueError("Missing 'data.raw_dir_path' in configuration.")
+
+    return ExtractConfig(
+        token=github_cfg['token'],
+        api_base_url=github_cfg['api_base_url'],
+        repository=github_cfg['repository'],
+        organization=github_cfg['organization'],
+        raw_dir_path=data_cfg['raw_dir_path'],
+    )
+
+
+def fetch_data(fetch_fn, description: str, *args, **kwargs):
+    """
+    Wrapper to call a fetch function and log any exceptions.
+
+    Returns:
+        The result of fetch_fn, or None on error.
+    """
     try:
-        return fetch_function(*args, **kwargs)
-    except Exception as e:
-        logger.exception(f'Error fetching {description}: {e}')
+        return fetch_fn(*args, **kwargs)
+    except Exception:
+        logger.exception(f"Error fetching {description}.")
         return None
 
-def fetch_config(config: dict):
-    github_cfg = config.get('github', {})
-    if not github_cfg:
-        raise ValueError("GitHub configuration is missing in the provided config.")
 
-    required_keys = ['token', 'api_base_url', 'repository', 'organization']
-    for key in required_keys:
-        if key not in github_cfg:
-            raise ValueError(f"Missing required GitHub configuration key: {key}")
+def save_raw_data(raw_payload, cfg):
+    """
+    Saves the raw data payload as JSON in the configured directory.
 
-    data_cfg = config.get('data', {})
-    if not data_cfg:
-        raise ValueError("Data configuration is missing in the provided config.")
-    if 'raw_dir_path' not in data_cfg:
-        raise ValueError("Missing 'raw_dir_path' in data configuration.")
+    Raises:
+        IOError: if file write fails.
+    """
+    os.makedirs(cfg.raw_dir_path, exist_ok=True)
+    filename = RAW_FILENAME_TEMPLATE.format(org=cfg.organization, repo=cfg.repository)
+    path = os.path.join(cfg.raw_dir_path, filename)
 
-    return github_cfg, github_cfg['repository'], github_cfg['organization'], data_cfg['raw_dir_path']
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(raw_payload, f, ensure_ascii=False, indent=4)
+    logger.info(f"Saved raw data to {path}")
 
 
+def run_extract(config) -> bool:
+    """
+    the extraction pipeline:
+      1. Validates configuration
+      2. Fetches merged PRs
+      3. Fetches reviews
+      4. Fetches check runs
+      5. Compiles and saves raw JSON
 
-def run_extract(config: dict) -> bool:
+    Returns:
+        True if successful, False otherwise.
+    """
+    # 1. Validate configuration
     try:
-        github_cfg, repo_name, org_name, raw_dir_path = fetch_config(config)
-    except Exception as e:
-        logger.name = f'{__name__}'
-        logger.exception(f'Error fetching configuration: {e}')
+        cfg = fetch_config(config)
+        logger.name = f"{__name__}_{cfg.organization}_{cfg.repository}"
+        logger.info(f"Configuration validated for {cfg.organization}/{cfg.repository}")
+    except Exception:
+        logger.exception("Failed to validate configuration.")
         return False
 
-    logger.name = f'{__name__}_{org_name}_{repo_name}'
-    logger.info(f'Extracting {org_name}/{repo_name}...')
+    # Initialize GitHub client
+    client = GitHubClient(cfg.token, cfg.api_base_url)
+    logger.info(f"Initialized GitHubClient for {cfg.api_base_url}")
 
-    client = GitHubClient(github_cfg['token'], github_cfg['api_base_url'])
+    # 2. Fetch merged PRs
+    try:
+        merged_prs = fetch_data(client.fetch_merged_prs,"merged PRs",cfg.organization,cfg.repository) or []
+        logger.info(f"Fetched {len(merged_prs)} merged PRs.")
 
-    logger.info(f'fetching merged PRs...')
-    merged_prs = fetch_data(client.fetch_merged_prs, "merged PRs", github_cfg['organization'], repo_name)
-    if not merged_prs:
-        logger.warning(f'No merged PRs found.')
+        if not merged_prs:
+            logger.warning("No merged PRs found. Stopping extraction.")
+            return False
+
+    except Exception:
+        # fetch_data logs the exception
         return False
 
-    logger.info(f'Found {len(merged_prs)} merged PRs.')
-    logger.info(f'Fetching reviews')
-    reviews = fetch_data(
-        lambda: [(pr['number'], client.fetch_approved_reviews(
-            organization=org_name,
-            repo=repo_name,
-            pr_number=pr['number']
-        )) for pr in merged_prs],
-    "reviews"
-    )
+    # 3. Fetch reviews
+    try:
+        reviews_list = []
+        for pr in tqdm(merged_prs, desc="Fetching PR reviews", unit="PR"):
+            num = pr['number']
+            revs = (
+                    fetch_data(client.fetch_approved_reviews,f"reviews for PR {num}",cfg.organization,cfg.repository,num)
+                    or [])
+            reviews_list.append((num, revs))
 
-    if reviews is None: # with fetch_approved_reviews it can't happen, but if we change it in the future, we should handle this case
-        logger.warning('Reviews is None')
-        reviews = []
-    reviews = {pr_number: review for pr_number, review in reviews}
-    logger.info(f'Found {len(reviews)} reviews for merged PRs.')
+        reviews = {num: revs for num, revs in reviews_list}
+        logger.info(f"Fetched reviews for {len(reviews)} PRs.")
+    except Exception:
+        # fetch_data logs the exception
+        return False
 
-    logger.info(f'Fetching check runs')
-    check_statuses = fetch_data(
-        lambda: [(pr['number'], client.fetch_pr_check_runs(
-            organization=org_name,
-            repo=repo_name,
-            merge_commit_sha=pr['merge_commit_sha']
-        )) for pr in merged_prs],
-     "check runs"
-    )
+    # 4. Fetch check runs
+    try:
+        checks_list = []
+        for pr in tqdm(merged_prs, desc="Fetching check runs", unit="PR"):
+            num = pr['number']
+            checks = (
+                fetch_data(client.fetch_pr_check_runs, f"check runs for PR {num}", cfg.organization, cfg.repository, pr['merge_commit_sha'])
+                or [])
+            checks_list.append((num, checks))
 
-    if check_statuses is None: # with fetch_pr_check_runs it can't happen, but if we change it in the future, we should handle this case
-        logger.warning('check_statuses is None')
-        check_statuses = []
-    check_statuses = {pr_number: checks for pr_number, checks in check_statuses}
-    logger.info(f'Found {len(check_statuses)} check runs for merged PRs.')
+        check_statuses = {num: checks for num, checks in checks_list}
+        logger.info(f"Fetched check runs for {len(check_statuses)} PRs.")
+    except Exception:
+        # fetch_data logs the exception
+        return False
 
-
-    raw_data = {
+    # 5. Compile payload and save
+    raw_payload = {
         'last_merged_date': max(merged_prs, key=lambda pr: pr['merged_at'])['merged_at'],
         'first_merged_date': min(merged_prs, key=lambda pr: pr['merged_at'])['merged_at'],
         'merged_prs': merged_prs,
         'reviews': reviews,
-        'check_statuses': check_statuses
+        'check_statuses': check_statuses,
     }
-
-    logger.info(f'Saving raw data to {raw_dir_path}/{org_name}_{repo_name}_merged_prs.json')
     try:
-        save_raw_data_to_file(raw_data,org_name ,raw_dir_path, repo_name)
-    except Exception as e:
-        logger.exception(f'Error saving raw data: {e}')
+        save_raw_data(raw_payload, cfg)
+
+    except Exception:
+        logger.exception("Error saving raw data.")
         return False
 
+    logger.info(f"Extraction completed successfully for {cfg.organization}/{cfg.repository}")
     return True
-

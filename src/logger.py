@@ -1,8 +1,6 @@
-# logger.py
-import logging
+
 import os
 from logging.config import dictConfig
-from logging.handlers import RotatingFileHandler
 
 def setup_logging(
     name: str = "scytale_pr_report",
