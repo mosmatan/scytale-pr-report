@@ -71,7 +71,6 @@ Setup Instructions:
    --reviewers USER [..]      Only include reviews by these usernames
    --recent-reviews N         Only include reviews submitted in the last N days
    --check-names NAME [..]    Only include check runs with these names
-   --pass-only                Only include checks that succeeded
    ```
 
    For detailed help on flags:
