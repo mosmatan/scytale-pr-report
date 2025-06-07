@@ -8,19 +8,19 @@ class GitHubClient:
     def __init__(self, token, base_url, page_size=50):
         self.base_url = base_url.rstrip('/')
         self.page_size = page_size
+        self.token = token
 
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.headers = {
             'Authorization': f'Bearer {token}',
             'Accept': 'application/vnd.github.v3+json',
-        })
+        }
 
         logger.debug(f"GitHubClient initialized with base_url={self.base_url}, page_size={self.page_size}")
 
     def _get_json(self, endpoint, params=None):
         url = f"{self.base_url}{endpoint}"
 
-        response = self.session.get(url, params=params)
+        response = requests.get(url, headers=self.headers, params=params)
         response.raise_for_status()
 
         return response.json()

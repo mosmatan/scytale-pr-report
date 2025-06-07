@@ -1,6 +1,6 @@
 github:
   organization: "mosmatan"
-  repository: "PR_Tests"
+  repository: "simplebank"
   api_base_url: "https://api.github.com"
 
 data:
