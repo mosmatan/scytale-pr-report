@@ -11,20 +11,15 @@ def load_config():
 
 def main():
     config = load_config()
-#    github_cfg = config['github']
 
+    succeed_extract = run_extract(config)
 
- #   client = GitHubClient(github_cfg['token'], github_cfg['api_base_url'])
- #   prs = client.fetch_merged_prs(github_cfg['organization'], github_cfg['repository'])
+    if succeed_extract:
+        run_transformation(config)
+    else:
+        print("No merged PRs found, skipping transformation step.")
 
-  #  for pr in prs:
-   #     print(json.dumps(pr))
-
-    run_extract(config)
-
-    run_transformation(config)
-
-
+    print("Done")
 
 
 if __name__ == "__main__":
