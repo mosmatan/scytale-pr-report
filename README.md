@@ -6,6 +6,8 @@ Requirements:
 
 Setup Instructions:
 
+If using python3 write "python3" insted of "python"
+
 1. Clone the repository and enter the directory:
 
    ```bash
