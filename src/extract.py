@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 # File name template for raw data output
 RAW_FILENAME_TEMPLATE = "{org}_{repo}_merged_prs.json"
 
+
 @dataclass(frozen=True)
 class ExtractConfig:
     """
@@ -34,7 +35,7 @@ def fetch_config(config) -> ExtractConfig:
     github_cfg = config.get('github')
     if not github_cfg:
         raise ValueError("Missing 'github' section in configuration.")
-    for key in ('token', 'api_base_url', 'repository', 'organization'):
+    for key in ('api_base_url', 'repository', 'organization'):
         if key not in github_cfg:
             raise ValueError(f"Missing GitHub config key: '{key}'")
 
@@ -43,6 +44,8 @@ def fetch_config(config) -> ExtractConfig:
         raise ValueError("Missing 'data.raw_dir_path' in configuration.")
 
     load_dotenv()
+    if not os.getenv('GITHUB_TOKEN'):
+        raise ValueError("Missing GITHUB_TOKEN environment variable. Please set it before running the script.")
 
     return ExtractConfig(
         # how to get the token from environment variable???

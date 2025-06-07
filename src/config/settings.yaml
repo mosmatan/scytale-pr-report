@@ -1,6 +1,6 @@
 github:
-  organization: "<YOUR ORGANIZATION>"
-  repository: "<YOUR REPOSITORY>"
+  organization: "mosmatan"
+  repository: "PR_Tests"
   api_base_url: "https://api.github.com"
 
 data:

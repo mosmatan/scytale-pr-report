@@ -8,7 +8,6 @@ from tqdm import tqdm
 
 import pandas as pd
 
-from src.extract import RAW_FILENAME_TEMPLATE
 
 # Constants
 MERGED_PRS_KEY = 'merged_prs'
@@ -26,7 +25,6 @@ class TransformConfig:
     """
     Configuration for the transformation process.
     """
-    token: str
     api_base_url: str
     repository: str
     organization: str
@@ -46,7 +44,7 @@ def fetch_config(config):
     if not github_cfg:
         raise ValueError("Missing 'github' section in configuration.")
 
-    for key in ('token', 'api_base_url', 'repository', 'organization'):
+    for key in ('api_base_url', 'repository', 'organization'):
         if key not in github_cfg:
             raise ValueError(f"Missing GitHub config key: '{key}'")
 
@@ -63,7 +61,6 @@ def fetch_config(config):
         raise ValueError("Missing 'output.report_dir_path' in configuration.")
 
     return TransformConfig(
-        token=github_cfg['token'],
         api_base_url=github_cfg['api_base_url'],
         repository=github_cfg['repository'],
         organization=github_cfg['organization'],
