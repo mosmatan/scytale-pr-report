@@ -4,8 +4,8 @@ github:
   api_base_url: "https://api.github.com"
 
 data:
-  raw_dir_path: "../data/raw"
-  processed_dir_path: "../data/processed"
+  raw_dir_path: "data/raw"
+  processed_dir_path: "data/processed"
 
 output:
-  report_dir_path: "../output/reports"
+  report_dir_path: "output/reports"
