@@ -9,3 +9,4 @@ data:
 
 output:
   report_dir_path: "output/reports"
+

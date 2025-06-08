@@ -1,9 +1,16 @@
 .venv/
 .idea/
+*.env
 
 
 data/raw/*
 data/processed/*
 output/reports/*
+src/config/
+src/data/
+src/logs/
+src/output/
+logs/
+
 
 src/config/settings.yaml

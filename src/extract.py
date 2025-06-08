@@ -57,7 +57,6 @@ def fetch_config(config) -> ExtractConfig:
         raw_dir_path=data_cfg['raw_dir_path'],
     )
 
-
 def fetch_data(fetch_func, description: str, *args, **kwargs):
     """
     Wrapper to call a fetch function and log any exceptions.

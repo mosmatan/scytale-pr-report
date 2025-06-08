@@ -10,6 +10,7 @@ def setup_logging(
     max_bytes: int = 5*1024*1024,
     backup_count: int = 3
 ):
+
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, filename)
 

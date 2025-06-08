@@ -101,3 +101,4 @@ class GitHubClient:
 
         logger.debug(f"Found {len(runs)} check runs for commit {commit_sha}")
         return runs
+

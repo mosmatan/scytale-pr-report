@@ -140,3 +140,4 @@ Outputs:
 * **CSV report:** `output/reports/{org}_{repo}_report.csv`
 
 Enjoy using Scytale PR Report!
+
