@@ -29,6 +29,11 @@ def main():
     filters.add_filter_args(parser)
     args = parser.parse_args()
 
+    # build filter lists from args
+    pr_filters     = filters.build_pr_filters(args)
+    review_filters = filters.build_review_filters(args)
+    check_filters  = filters.build_check_filters(args)
+
     logger.info("Starting Scytale PR Report…")
 
     # load YAML config
@@ -37,11 +42,6 @@ def main():
     except FileNotFoundError:
         logger.error(f"Configuration file not found: {args.config}")
         sys.exit(1)
-
-    # build filter lists from args
-    pr_filters     = filters.build_pr_filters(args)
-    review_filters = filters.build_review_filters(args)
-    check_filters  = filters.build_check_filters(args)
 
     # run extraction (applies the filters internally)
     succeeded = run_extract(config, pr_filters, review_filters, check_filters)

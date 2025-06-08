@@ -1,6 +1,6 @@
 github:
-  organization: "mosmatan"
-  repository: "simplebank"
+  organization: "Scytale-exercise"
+  repository: "scytale-repo3"
   api_base_url: "https://api.github.com"
 
 data:
