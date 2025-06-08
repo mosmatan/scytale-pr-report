@@ -9,8 +9,9 @@ from GitHubClient import GitHubClient
 
 logger = logging.getLogger(__name__)
 
-# File name template for raw data output
+# Constants
 RAW_FILENAME_TEMPLATE = "{org}_{repo}_merged_prs.json"
+GITHUB_TOKEN_ENV_VER_NAME = 'GITHUB_TOKEN'
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,7 @@ class ExtractConfig:
     organization: str
     raw_dir_path: str
 
-
+# Functions (main extraction function is run_extract (last one defined))
 def fetch_config(config) -> ExtractConfig:
     """
     Parses and validates the configuration dictionary for extraction.
@@ -44,12 +45,12 @@ def fetch_config(config) -> ExtractConfig:
         raise ValueError("Missing 'data.raw_dir_path' in configuration.")
 
     load_dotenv()
-    if not os.getenv('GITHUB_TOKEN'):
-        raise ValueError("Missing GITHUB_TOKEN environment variable. Please set it before running the script.")
+    if not os.getenv(GITHUB_TOKEN_ENV_VER_NAME):
+        raise ValueError(f"Missing {GITHUB_TOKEN_ENV_VER_NAME} environment variable. Please set it before running the script.")
+
 
     return ExtractConfig(
-        # how to get the token from environment variable???
-        token= os.getenv('GITHUB_TOKEN'),
+        token= os.getenv(GITHUB_TOKEN_ENV_VER_NAME),
         api_base_url=github_cfg['api_base_url'],
         repository=github_cfg['repository'],
         organization=github_cfg['organization'],
@@ -57,15 +58,15 @@ def fetch_config(config) -> ExtractConfig:
     )
 
 
-def fetch_data(fetch_fn, description: str, *args, **kwargs):
+def fetch_data(fetch_func, description: str, *args, **kwargs):
     """
     Wrapper to call a fetch function and log any exceptions.
 
     Returns:
-        The result of fetch_fn.
+        The result of fetch_func.
     """
     try:
-        return fetch_fn(*args, **kwargs)
+        return fetch_func(*args, **kwargs)
     except Exception:
         logger.exception(f"Error fetching {description}.")
         raise
@@ -86,10 +87,50 @@ def save_raw_data(raw_payload, cfg):
         json.dump(raw_payload, f, ensure_ascii=False, indent=4)
     logger.info(f"Saved raw data to {path}")
 
+def fetch_check_runs(client, merged_prs, config, check_filters):
 
+    logger.info('Fetching check runs for merged PRs...')
+    if len(check_filters) > 0:
+        logger.info(f"Applying check filters")
+
+    checks_list = []
+    for pr in tqdm(merged_prs, desc="Fetching check runs", unit="PR"):
+        num = pr['number']
+        checks = (
+            fetch_data(client.fetch_pr_check_runs, f"check runs for PR {num}",
+                       config.organization, config.repository, pr['merge_commit_sha'], filters=check_filters)
+            or [])
+        checks_list.append((num, checks))
+
+    check_statuses = {num: checks for num, checks in checks_list}
+    logger.info(f"Fetched {sum([len(checks) for _, checks in check_statuses.items()])} check runs for {len(merged_prs)} PRs.")
+
+    return check_statuses
+
+def fetch_reviews(client, merged_prs, config, review_filters):
+
+    logger.info('Fetching reviews for merged PRs...')
+    if len(review_filters) > 0:
+        logger.info(f"Applying review filters")
+
+    reviews_list = []
+    for pr in tqdm(merged_prs, desc="Fetching PR reviews", unit="PR"):
+        num = pr['number']
+        revs = (fetch_data(client.fetch_approved_reviews, f"reviews for PR {num}",
+                           config.organization, config.repository, num, filters=review_filters)
+                or [])
+        reviews_list.append((num, revs))
+
+    reviews = {num: revs for num, revs in reviews_list}
+    logger.info(f"Fetched {sum([len(rev) for _, rev in reviews.items()])} approved reviews for {len(merged_prs)} merged PRs.")
+
+    return reviews
+
+
+# Main extraction function
 def run_extract(config, pr_filters, review_filters, check_filters) -> bool:
     """
-    the extraction pipeline:
+    extraction pipeline:
       1. Validates configuration
       2. Fetches merged PRs
       3. Fetches reviews
@@ -115,8 +156,8 @@ def run_extract(config, pr_filters, review_filters, check_filters) -> bool:
         return False
 
     # Initialize GitHub client
+    logger.info("Initializing GitHub client...")
     client = GitHubClient(cfg.token, cfg.api_base_url)
-    logger.info(f"Initialized GitHubClient for {cfg.api_base_url}")
 
     # Default to no filters
     pr_filters = pr_filters or []
@@ -131,57 +172,27 @@ def run_extract(config, pr_filters, review_filters, check_filters) -> bool:
 
         merged_prs = fetch_data(client.fetch_merged_prs,"merged PRs",
                                 cfg.organization,cfg.repository, filters=pr_filters) or []
-
         if not merged_prs:
             logger.warning("No merged PRs found. Stopping extraction.")
             return False
 
         logger.info(f"Fetched {len(merged_prs)} merged PRs.")
-
     except Exception:
         # fetch_data logs the exception
         return False
 
     # 3. Fetch reviews
     try:
-        logger.info('Fetching reviews for merged PRs...')
-        if len(review_filters) > 0:
-            logger.info(f"Applying review filters")
-
-        reviews_list = []
-        for pr in tqdm(merged_prs, desc="Fetching PR reviews", unit="PR"):
-            num = pr['number']
-            revs = (
-                    fetch_data(client.fetch_approved_reviews,f"reviews for PR {num}",
-                               cfg.organization,cfg.repository,num, filters=review_filters)
-                    or [])
-            reviews_list.append((num, revs))
-
-        reviews = {num: revs for num, revs in reviews_list}
-        logger.info(f"Fetched reviews {sum([len(rev) for _ , rev in reviews.items()])} approved reviews for {len(merged_prs)} merged PRs.")
+        reviews = fetch_reviews(client, merged_prs, cfg, review_filters)
     except Exception:
-        # fetch_data logs the exception
+        # fetch_data that inside fetch_reviews logs the exception
         return False
 
     # 4. Fetch check runs
     try:
-        logger.info('Fetching check runs for merged PRs...')
-        if len(check_filters) > 0:
-            logger.info(f"Applying check filters")
-
-        checks_list = []
-        for pr in tqdm(merged_prs, desc="Fetching check runs", unit="PR"):
-            num = pr['number']
-            checks = (
-                fetch_data(client.fetch_pr_check_runs, f"check runs for PR {num}",
-                           cfg.organization, cfg.repository, pr['merge_commit_sha'], filters=check_filters)
-                or [])
-            checks_list.append((num, checks))
-
-        check_statuses = {num: checks for num, checks in checks_list}
-        logger.info(f"Fetched {sum([len(checks) for _ , checks in check_statuses.items()])} check runs for {len(merged_prs)} PRs.")
+        check_statuses = fetch_check_runs(client, merged_prs, cfg, check_filters)
     except Exception:
-        # fetch_data logs the exception
+        # fetch_data that inside fetch_check_runs logs the exception
         return False
 
     # 5. Compile payload and save
@@ -199,3 +210,6 @@ def run_extract(config, pr_filters, review_filters, check_filters) -> bool:
 
     logger.info(f"Extraction completed successfully for {cfg.organization}/{cfg.repository}")
     return True
+
+
+

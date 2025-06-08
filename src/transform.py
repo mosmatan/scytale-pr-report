@@ -168,6 +168,7 @@ def run_transformation(config_dict) -> None:
         Exception: for any other errors during processing
 
     """
+    # 1. Validate configuration
     cfg = fetch_config(config_dict)
     logger.name = f'{__name__}_{cfg.organization}_{cfg.repository}'
     logger.info(f"Starting transformation")
@@ -177,23 +178,26 @@ def run_transformation(config_dict) -> None:
         raw_filename = RAW_FILENAME_TEMPLATE.format(org=cfg.organization, repo=cfg.repository)
         raw_path = os.path.join(cfg.raw_dir_path, raw_filename)
 
-        # Load raw data
+        # 2. Load raw data
         merged_prs, reviews_map, checks_map = load_raw_prs(raw_path)
 
         if len(merged_prs) == 0:
             logger.warning(f"No merged PRs found. Skipping transformation")
             return
 
-        # Process PRs
+        # 3. Process PRs
         processed_prs = []
         for pr in tqdm(merged_prs, desc="Processing PRs", unit="PR"):
             pr_key = str(pr.get('number'))
+
             if pr_key not in reviews_map or pr_key not in checks_map:
                 raise KeyError(f"Missing data for PR number {pr_key}")
+
             processed_prs.append(process_pr(pr, reviews_map[pr_key], checks_map[pr_key]))
+
         logger.info(f"Processed {len(processed_prs)} PR records")
 
-        # Save outputs
+        # 4. Save outputs
         save_processed_prs(processed_prs, cfg)
         save_report(processed_prs, cfg)
 
