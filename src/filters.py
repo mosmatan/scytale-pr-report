@@ -30,10 +30,6 @@ def add_filter_args(parser):
         "--check-names", nargs='+',
         help="Only include check runs with these names"
     )
-    parser.add_argument(
-        "--pass-only", action='store_true',
-        help="Only include checks that succeeded"
-    )
 
 
 # --- Filter factories ------------------------------------
@@ -59,13 +55,9 @@ def recent_reviews_filter(days: int):
 
 
 def check_name_filter(names):
-    print("Check names filter:", names)
     names_set = set(names)
     return lambda chk: chk['name'] in names_set
 
-
-def pass_only_filter(_):
-    return lambda chk: chk.get('conclusion') == 'success'
 
 
 # --- Builders --------------------------------------------
@@ -92,6 +84,4 @@ def build_check_filters(args):
     fns = []
     if args.check_names:
         fns.append(check_name_filter(args.check_names))
-    if args.pass_only:
-        fns.append(pass_only_filter(True))
     return fns

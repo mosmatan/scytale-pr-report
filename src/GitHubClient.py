@@ -26,6 +26,10 @@ class GitHubClient:
         return response.json()
 
     def _paginate(self, endpoint, params=None, data_key=None):
+        """
+        iterate over paginated results and yield items one by one.
+        handles pagination by fetching pages until no more items are available.
+        """
         page = 1
 
         while True:
@@ -36,8 +40,8 @@ class GitHubClient:
             if not items:
                 break
 
-            for item in items: # iterate over items in the current page (iterator dp)
-                yield item
+            for item in items:
+                yield item # yield each item one by one (iterator dp)
 
             page += 1
 
@@ -52,7 +56,7 @@ class GitHubClient:
         }
 
         prs = []
-        for pr in self._paginate(endpoint, params):
+        for pr in self._paginate(endpoint, params): # iterate over paginated results
             if not pr.get('merged_at'):
                 continue
 

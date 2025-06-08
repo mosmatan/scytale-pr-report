@@ -47,7 +47,6 @@ def fetch_config(config) -> ExtractConfig:
     if not os.getenv('GITHUB_TOKEN'):
         raise ValueError("Missing GITHUB_TOKEN environment variable. Please set it before running the script.")
 
-    print(f"from env: {os.getenv('GITHUB_TOKEN')}")
     return ExtractConfig(
         # how to get the token from environment variable???
         token= os.getenv('GITHUB_TOKEN'),
@@ -126,6 +125,10 @@ def run_extract(config, pr_filters, review_filters, check_filters) -> bool:
 
     # 2. Fetch merged PRs
     try:
+        logger.info('Fetching merged PRs...')
+        if len(pr_filters) > 0:
+            logger.info(f"Applying PR filters")
+
         merged_prs = fetch_data(client.fetch_merged_prs,"merged PRs",
                                 cfg.organization,cfg.repository, filters=pr_filters) or []
 
@@ -141,6 +144,10 @@ def run_extract(config, pr_filters, review_filters, check_filters) -> bool:
 
     # 3. Fetch reviews
     try:
+        logger.info('Fetching reviews for merged PRs...')
+        if len(review_filters) > 0:
+            logger.info(f"Applying review filters")
+
         reviews_list = []
         for pr in tqdm(merged_prs, desc="Fetching PR reviews", unit="PR"):
             num = pr['number']
@@ -151,13 +158,17 @@ def run_extract(config, pr_filters, review_filters, check_filters) -> bool:
             reviews_list.append((num, revs))
 
         reviews = {num: revs for num, revs in reviews_list}
-        logger.info(f"Fetched reviews for {len(reviews)} PRs filtered by {len(review_filters)} filters.")
+        logger.info(f"Fetched reviews {sum([len(rev) for _ , rev in reviews.items()])} approved reviews for {len(merged_prs)} merged PRs.")
     except Exception:
         # fetch_data logs the exception
         return False
 
     # 4. Fetch check runs
     try:
+        logger.info('Fetching check runs for merged PRs...')
+        if len(check_filters) > 0:
+            logger.info(f"Applying check filters")
+
         checks_list = []
         for pr in tqdm(merged_prs, desc="Fetching check runs", unit="PR"):
             num = pr['number']
@@ -168,7 +179,7 @@ def run_extract(config, pr_filters, review_filters, check_filters) -> bool:
             checks_list.append((num, checks))
 
         check_statuses = {num: checks for num, checks in checks_list}
-        logger.info(f"Fetched check runs for {len(check_statuses)} PRs filtered by {len(check_filters)} filters.")
+        logger.info(f"Fetched {sum([len(checks) for _ , checks in check_statuses.items()])} check runs for {len(merged_prs)} PRs.")
     except Exception:
         # fetch_data logs the exception
         return False
