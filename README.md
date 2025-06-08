@@ -6,18 +6,36 @@ Requirements:
 
 Setup Instructions:
 
+If using python3 write "python3" insted of "python"
+
 1. Clone the repository and enter the directory:
 
    ```bash
    git clone https://github.com/mosmatan/scytale-pr-report.git
-   cd scytale-pr-report
+   cd scytale-pr-report/src
    ```
 
 2. (Optional) Create and activate a virtual environment:
 
+   **macOS/Linux:**
+
    ```bash
-   python3 -m venv venv
+   python -m venv venv
    source venv/bin/activate
+   ```
+
+   **Windows (CMD):**
+
+   ```batch
+   python -m venv venv
+   venv\Scripts\activate.bat
+   ```
+
+   **Windows (PowerShell):**
+
+   ```powershell
+   python -m venv venv
+   venv\Scripts\Activate.ps1
    ```
 
 3. Install dependencies:
@@ -28,20 +46,35 @@ Setup Instructions:
 
 4. Configure your GitHub token:
 
-   * Create a file named `.env` in the project root containing:
+   You can provide `GITHUB_TOKEN` via a `.env` file or environment variable.
 
-     ```ini
-     GITHUB_TOKEN=your_personal_access_token
-     ```
-   * Or export it in your shell:
+   **.env file (project root):**
 
-     ```bash
-     export GITHUB_TOKEN=your_personal_access_token
-     ```
+   ```ini
+   GITHUB_TOKEN=your_personal_access_token
+   ```
+
+   **macOS/Linux:**
+
+   ```bash
+   export GITHUB_TOKEN=your_personal_access_token
+   ```
+
+   **Windows (CMD):**
+
+   ```batch
+   set GITHUB_TOKEN=your_personal_access_token
+   ```
+
+   **Windows (PowerShell):**
+
+   ```powershell
+   $Env:GITHUB_TOKEN = "your_personal_access_token"
+   ```
 
 5. Edit the configuration file:
 
-   Open `config/settings.yaml` and update the values:
+   Open `config/settings.yaml` and update:
 
    ```yaml
    github:
@@ -60,7 +93,7 @@ Setup Instructions:
 6. Run the full pipeline:
 
    ```bash
-   python src/main.py [OPTIONS]
+   python main.py [OPTIONS]
    ```
 
    Available Filter Options:
@@ -71,12 +104,13 @@ Setup Instructions:
    --reviewers USER [..]      Only include reviews by these usernames
    --recent-reviews N         Only include reviews submitted in the last N days
    --check-names NAME [..]    Only include check runs with these names
+   --pass-only                Only include only passing check runs
    ```
 
    For detailed help on flags:
 
    ```bash
-   python src/main.py --help
+   python main.py --help
    ```
 
 Examples:
@@ -84,19 +118,19 @@ Examples:
 * Extract and transform all PRs:
 
   ```bash
-  python src/main.py
+  python main.py
   ```
 
 * Only include PRs merged in the last 7 days by author "alice":
 
   ```bash
-  python src/main.py --merged-since 7 --only-authors alice
+  python main.py --merged-since 7 --only-authors alice
   ```
 
 * Only include only passing check runs and reviews by "bob":
 
   ```bash
-  python src/main.py --pass-only --reviewers bob
+  python main.py --pass-only --reviewers bob
   ```
 
 Outputs:
