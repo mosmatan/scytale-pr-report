@@ -8,9 +8,9 @@ class GitHubClient:
     def __init__(self, token, base_url, page_size=50):
         self.base_url = base_url.rstrip('/')
         self.page_size = page_size
-        self.token = token
+        self._token = token
 
-        self.headers = {
+        self._headers = {
             'Authorization': f'Bearer {token}',
             'Accept': 'application/vnd.github.v3+json',
         }
@@ -20,7 +20,7 @@ class GitHubClient:
     def _get_json(self, endpoint, params=None):
         url = f"{self.base_url}{endpoint}"
 
-        response = requests.get(url, headers=self.headers, params=params)
+        response = requests.get(url, headers=self._headers, params=params)
         response.raise_for_status()
 
         return response.json()
@@ -75,7 +75,7 @@ class GitHubClient:
 
         reviews = []
         for review in self._paginate(endpoint):
-            if review.get('state') != 'APPROVED':
+            if review.get('state') != 'APPROVED': # only interested in approved reviews
                 continue
 
             if filters and not all(fn(review) for fn in filters): # apply filters if provided
